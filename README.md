@@ -2,6 +2,16 @@
 
 Build your own bootable image files to automate the recovery of Windows hosts affected by the recent [Falcon Content Update](https://www.crowdstrike.com/falcon-content-update-remediation-and-guidance-hub/). 
 
+There are two bootable image types available. Use the ISO image that best suits your needs.
+
+- **CSPERecovery** - This image uses Windows PE to remove the impacted Channel File 291 with minimal user interaction. 
+  - If the volume has BitLocker Encryption, the bootable image will prompt for the BitLocker Recovery Key before performing the automated remediation.
+
+
+- **CSSafeBoot** - This image uses Windows PE to reboot the host into Safe Mode with Networking to allow manual removal of Channel File 291 using Windows Explorer or Command Prompt 
+  - If the volume has BitLocker Encryption, the Recovery Key is not required 
+  - Useful for systems having difficulty entering Safe Mode
+
 ## Create Bootable Images
 
 The following procedure will produce two bootable ISO images using the latest Microsoft ADK and Windows PE add-ons and drivers, along with common storage and input drivers for enterprise storage controllers including VirtIO, Intel RAID, VMware accelerated virtual storage, etc. These ISO images will also include the Falcon Windows Sensor host recovery scripts.
