@@ -17,27 +17,27 @@ Builds two bootable ISO images with device drivers downloaded from Dell, HP and 
 
 1. Download the [falcon-windows-host-recovery](https://github.com/CrowdStrike/falcon-windows-host-recovery) github project as a ZIP file.
 2. Extract falcon-windows-host-recovery-main.zip file contents to a directory of your choosing 
-   3. Example: `C:\falcon-windows-host-recovery` 
-4. Open a Windows PowerShell command prompt (as Administrator) and run script to build ISO images 
-   5. `cd C:\falcon-windows-host-recovery` 
-   6. `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process` 
-   7. `.\BuildISO.ps1` - downloads device drivers and creates ISO images 
-8. Build output ISO images 
-   9. `C:\falcon-windows-host-recovery\CSPERecovery_x64.iso` 
-   10. `C:\falcon-windows-host-recovery\CSSafeBoot_x64.iso`
+   1. Example: `C:\falcon-windows-host-recovery` 
+3. Open a Windows PowerShell command prompt (as Administrator) and run script to build ISO images 
+   1. `cd C:\falcon-windows-host-recovery` 
+   2. `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process` 
+   3. `.\BuildISO.ps1` - downloads device drivers and creates ISO images 
+4. Build output ISO images 
+   1. `C:\falcon-windows-host-recovery\CSPERecovery_x64.iso` 
+   2. `C:\falcon-windows-host-recovery\CSSafeBoot_x64.iso`
 
 
 #### WinPE Drivers Only or with Customer-supplied Drivers
 Builds two bootable ISO images with WinPE only or with your preferred device drivers
 
 1. Create bootable ISO images with WinPE only or with your preferred drivers 
-   2. `cd C:\falcon-windows-host-recovery` 
-   3. If preferred drivers, download and unpack into `C:\falcon-windows-host-recovery\Drivers` 
-   4. `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process` 
-   5. `.\BuildISO.ps1 -SkipThirdPartyDriverDownloads` 
-6. Build output ISO images 
-   7. `C:\falcon-windows-host-recovery\CSPERecovery_x64.iso`
-   8. `C:\falcon-windows-host-recovery\CSSafeBoot_x64.iso`
+   1. `cd C:\falcon-windows-host-recovery` 
+   2. If preferred drivers, download and unpack into `C:\falcon-windows-host-recovery\Drivers` 
+   3. `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process` 
+   4. `.\BuildISO.ps1 -SkipThirdPartyDriverDownloads` 
+2. Build output ISO images 
+   1. `C:\falcon-windows-host-recovery\CSPERecovery_x64.iso`
+   2. `C:\falcon-windows-host-recovery\CSSafeBoot_x64.iso`
 
 
 ## Using Bootable Images
