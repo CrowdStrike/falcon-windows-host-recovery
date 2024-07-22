@@ -6,6 +6,8 @@ Build your own bootable image files to automate the recovery of Windows hosts af
 
 The following procedure will produce two bootable ISO images using the latest Microsoft ADK and Windows PE add-ons and drivers, along with common storage and input drivers for enterprise storage controllers including VirtIO, Intel RAID, VMware accelerated virtual storage, etc. These ISO images will also include the Falcon Windows Sensor host recovery scripts.
 
+NOTE: If you prefer to generate a bootable ISO image manually, please refer to [manual_steps.pdf](https://github.com/CrowdStrike/falcon-windows-host-recovery/blob/main/manual_steps.pdf)   
+
 ### Requirements
 
 - Windows 10 (or higher) 64-bit client with at least 8Gb of free space, and administrative privileges.
