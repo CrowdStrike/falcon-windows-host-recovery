@@ -48,17 +48,17 @@ Builds two bootable ISO images with WinPE only or with your preferred device dri
 
 1. Download Rufus, an open-source utility for creating bootable USB sticks from https://rufus.ie/en/
 2. Open Rufus:
-   3. Select the desired USB Flash Drive target using the “Device” dropdown menu (NOTE: this USB Flash Drive will be wiped clean, make sure it’s the correct one)
-   4. Select the either the CSPERecovery or CSSafeBoot ISO file using the SELECT button beside “Boot Selection” label
-   5. Select “GPT” for the using the “Partition scheme” dropdown menu
-   6. Select “UEFI (non CSM)” using the “Target System” dropdown menu
-   7. Press Start
-      8. If prompted to write in ISO mode or ESP mode, select ESP Mode. ESP mode is more likely to be compatible with older hardware.
-9. Once complete, connect the USB Flash Drive to the intended target system
-10. Confirm that the target host has network access, preferably via wired ethernet.
-11. Reboot the target system and enter the UEFI boot Menu (usually F1, F2, F8, F11, or F12).
-12. Prepare to select the USB Flash Drive. If given both a MBR and UEFI option with the same label, prepare to select UEFI
-13. Wait while Windows PE loads and follow next sections for Running CSSafeBoot or CSPERecovery respectively
+   1. Select the desired USB Flash Drive target using the “Device” dropdown menu (NOTE: this USB Flash Drive will be wiped clean, make sure it’s the correct one)
+   2. Select the either the CSPERecovery or CSSafeBoot ISO file using the SELECT button beside “Boot Selection” label
+   3. Select “GPT” for the using the “Partition scheme” dropdown menu
+   4. Select “UEFI (non CSM)” using the “Target System” dropdown menu
+   5. Press Start
+      1. If prompted to write in ISO mode or ESP mode, select ESP Mode. ESP mode is more likely to be compatible with older hardware.
+3. Once complete, connect the USB Flash Drive to the intended target system
+4. Confirm that the target host has network access, preferably via wired ethernet.
+5. Reboot the target system and enter the UEFI boot Menu (usually F1, F2, F8, F11, or F12).
+6. Prepare to select the USB Flash Drive. If given both a MBR and UEFI option with the same label, prepare to select UEFI
+7. Wait while Windows PE loads and follow next sections for Running CSSafeBoot or CSPERecovery respectively
 
 #### Recovering Windows Hosts using CSSafeBoot
 
