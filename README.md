@@ -2,7 +2,7 @@
 
 Build your own bootable image files to automate the recovery of Windows hosts affected by the recent [Falcon Content Update](https://www.crowdstrike.com/falcon-content-update-remediation-and-guidance-hub/). 
 
-There are two bootable image types available. Use the ISO image that best suits your needs.
+There are two types of bootable images available - use the ISO image that best suits your needs.
 
 - **CSPERecovery** - This image uses Windows PE to remove the impacted Channel File 291 with minimal user interaction. 
   - If the volume has BitLocker Encryption, the bootable image will prompt for the BitLocker Recovery Key before performing the automated remediation.
@@ -12,11 +12,18 @@ There are two bootable image types available. Use the ISO image that best suits 
   - If the volume has BitLocker Encryption, the Recovery Key is not required 
   - Useful for systems having difficulty entering Safe Mode
 
+### Release Version 1.1
+- New build script command-line arguments to specify which driver sets to include 
+- New Microsoft Surface drivers 
+- CSSafeBoot ISO script automatically removes impacted Falcon Channel Files
+
+ 
 ## Create Bootable Images
 
-The following procedure will produce two bootable ISO images using the latest Microsoft ADK and Windows PE add-ons and drivers, along with common storage and input drivers for enterprise storage controllers including VirtIO, Intel RAID, VMware accelerated virtual storage, etc. These ISO images will also include the Falcon Windows Sensor host recovery scripts.
+This procedure will produce two bootable ISO images using the latest Microsoft ADK and Windows PE add-ons and drivers, Falcon Windows Sensor host recovery scripts, along with common storage controller and input drivers including VirtIO/OpenStack/ProxMox, Intel RAID, HP, Dell, VMware, Surface Tablets, etc. Generating the bootable ISOs may take upwards of 30 minutes to complete based on network and disk performance.
 
 NOTE: If you prefer to generate a bootable ISO image manually, please refer to [manual_steps.pdf](https://github.com/CrowdStrike/falcon-windows-host-recovery/blob/main/manual_steps.pdf)   
+
 
 ### Requirements
 
@@ -24,30 +31,43 @@ NOTE: If you prefer to generate a bootable ISO image manually, please refer to [
 
 ### Build ISO
 
-#### Default
-Builds two bootable ISO images with device drivers downloaded from Dell, HP and VMWare
+#### Default ISO Build (with included Drivers)
+Builds two bootable ISO images with device drivers from Red Hat/Virtio, Dell, HP, VMWare and Microsoft Surface (Models: Pro 8, 9, 10, Laptop 4 (Intel/AMD), 5.6).
 
 1. Download the [falcon-windows-host-recovery](https://github.com/CrowdStrike/falcon-windows-host-recovery) github project as a ZIP file.
+   1. Click the green Code button and select _Download ZIP_
 2. Extract falcon-windows-host-recovery-main.zip file contents to a directory of your choosing 
    1. Example: `C:\falcon-windows-host-recovery` 
+   2. IMPORTANT: path cannot contain spaces or special characters
 3. Open a Windows PowerShell command prompt (as Administrator) and run script to build ISO images 
    1. `cd C:\falcon-windows-host-recovery` 
-   2. `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process` 
+   2. `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process` 
    3. `.\BuildISO.ps1` - downloads device drivers and creates ISO images 
 4. Build output ISO images 
    1. `C:\falcon-windows-host-recovery\CSPERecovery_x64.iso` 
    2. `C:\falcon-windows-host-recovery\CSSafeBoot_x64.iso`
 
 
-#### WinPE Drivers Only or with Customer-supplied Drivers
-Builds two bootable ISO images with WinPE only or with your preferred device drivers
+#### Optional and Custom Driver ISO Build
+Builds two bootable ISO images with default WinPE drivers and preferred device drivers.
 
 1. Create bootable ISO images with WinPE only or with your preferred drivers 
    1. `cd C:\falcon-windows-host-recovery` 
-   2. If preferred drivers, download and unpack into `C:\falcon-windows-host-recovery\Drivers` 
-   3. `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process` 
-   4. `.\BuildISO.ps1 -SkipThirdPartyDriverDownloads` 
-2. Build output ISO images 
+2. Custom drivers - download and unpack device drivers of your choosing into 
+   1. `C:\falcon-windows-host-recovery\Drivers` 
+   2. NOTE: drivers in this folder _will always be installed_, regardless of command-line arguments.
+3. Command-line Arguments for `BuildISO.ps1` script
+   1. Optional drivers - include one or more driver sets (any combination supported)
+      1. `-IncludeDellDrivers` 
+      2. `-IncludeHPDrivers` 
+      3. `-IncludeSurfaceDrivers` 
+      4. `-IncludeVMwareDrivers`
+   2. Minimal drivers - skip all included driver sets (NOTE: overrides any `-Include*` args)
+      1. `-SkipThirdPartyDriverDownloads`
+4. Create bootable ISO images
+   1. `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process`
+   2. `.\BuildISO.ps1 -<Command-line Arguments>` 
+5. Build output ISO images 
    1. `C:\falcon-windows-host-recovery\CSPERecovery_x64.iso`
    2. `C:\falcon-windows-host-recovery\CSSafeBoot_x64.iso`
 
@@ -58,36 +78,62 @@ Builds two bootable ISO images with WinPE only or with your preferred device dri
 
 1. Download Rufus, an open-source utility for creating bootable USB sticks from https://rufus.ie/en/
 2. Open Rufus:
-   1. Select the desired USB Flash Drive target using the “Device” dropdown menu (NOTE: this USB Flash Drive will be wiped clean, make sure it’s the correct one)
-   2. Select the either the CSPERecovery or CSSafeBoot ISO file using the SELECT button beside “Boot Selection” label
-   3. Select “GPT” for the using the “Partition scheme” dropdown menu
-   4. Select “UEFI (non CSM)” using the “Target System” dropdown menu
+   1. Use the “Device” menu to select the desired USB drive target 
+      1. **WARNING: USB drive will be wiped clean**
+   2. Use the “Select” button (next to “Boot Selection”) and choose the CSPERecovery or CSSafeBoot ISO file
+   3. Use “Partition scheme” dropdown menu and select “GPT” 
+   4. Use the “Target System” dropdown menu to select “UEFI (non CSM)” 
    5. Press Start
-      1. If prompted to write in ISO mode or ESP mode, select ESP Mode. ESP mode is more likely to be compatible with older hardware.
-3. Once complete, connect the USB Flash Drive to the intended target system
-4. Confirm that the target host has network access, preferably via wired ethernet.
-5. Reboot the target system and enter the UEFI boot Menu (usually F1, F2, F8, F11, or F12).
-6. Prepare to select the USB Flash Drive. If given both a MBR and UEFI option with the same label, prepare to select UEFI
-7. Wait while Windows PE loads and follow next sections for Running CSSafeBoot or CSPERecovery respectively
+      1. **IMPORTANT**: If prompted to write in ISO mode or ESP mode, please read the following guidance carefully:
+      2. ISO mode should be attempted **first**. 
+         1. It offers the most complete user experience, supports both MBR and UEFI booting, and enables the automated cleanup script for the CSSafeBoot ISO. 
+            1. The CSPERecovery ISO is not impacted. 
+      3. ESP mode should be tried _if the machine does not see the bootable USB drive_, particularly on older UEFI systems 
+         1. Go back to Step 2 and  repeat these steps and select ESP mode. 
+         2. The automated cleanup script will be unavailable for the CSSafeBoot ISO, but manual remediation steps are still available and will succeed. 
+            1. The CSPERecovery ISO is not impacted.
 
-#### Recovering Windows Hosts using CSSafeBoot
+3. Once complete, insert the USB drive into the impacted system
+4. Confirm the host has network access, preferably via wired ethernet
+5. Reboot the target system and enter the UEFI boot Menu 
+   1. Usually the F1, F2, F8, F11, or F12 key
+6. Prepare to select the USB Flash Drive. 
+   1. If given both a MBR and UEFI option with the same label, prepare to select UEFI
+7. Wait while Windows PE loads 
+8. Use the appropriate "Recover..." guide below for _CSSafeBoot_ or _CSPERecovery_ 
 
-1. CSSafeBoot will automatically reconfigure the bootloader on the machine to boot into Safe Mode with Networking and reboot. 
-2. If your system reboots into the Windows Recovery environment as a part of a prior boot loop, select Continue. The machine will reboot into safe mode on the next boot. 
-3. Log in as an user with Local Administrator permissions 
-4. Confirm the Safe mode banner is displayed on the desktop 
-5. Open Windows Explorer and navigate to C:\Windows\System32\drivers\Crowdstrike 
-6. Delete all offending files that start with C-00000291*
-7. Open command prompt (Right click -> Run as administrator)
-8. Type bcdedit /deletevalue {default} safeboot, then press Enter 
-9. Reboot the device and verify the operating system loads successfully.
 
-#### Recovering Windows Hosts using CSPERecovery
+#### Recover Windows Hosts using CSPERecovery
 
 1. If more than one drive is detected, select the drive letter associated with the impacted OS. 
-2. If prompted, enter your BitLocker Recovery Key to unlock the volume 
-3. Let the utility find and remove the impacted Channel File 291 sys file 
-4. The utility will reboot the device and the operating system should load successfully.
+2. If prompted, enter your BitLocker Recovery Key to unlock the volume
+3. Recovery script will remove the impacted Channel File 291 sys file 
+   1. Deletes all files starting with `C-00000291*` located in the `C:\Windows\System32\drivers\CrowdStrike\folder` 
+   2. The device will automatically reboot 
+4. Windows host should load successfully.
+
+#### Recover Windows Hosts using CSSafeBoot
+
+CSSafeBoot ISO will automatically reconfigure the bootloader on the machine to boot into Safe Mode with Networking and reboot. 
+
+1. NOTE: If your system reboots into the Windows Recovery environment as a part of a prior boot loop, select Continue. 
+   1. The machine will reboot into Safe Mode after the next boot. 
+2. Log in as an user with _Local Administrator_ permissions 
+3. Confirm the Safe mode banner is displayed on the desktop
+4. To perform remediation steps automatically
+   1. Open Windows Explorer and navigate to drive letter for your bootable image mount (e.g. D:)
+      1. If your bootable image is not listed as a drive letter in Windows Explorer, please skip to the next section titled “To execute remediation steps manually” as your specific configuration may preclude the use of the automatic remediation script. 
+   2. Right-click on the file `CSRecovery.cmd` and _Run as administrator_
+      1. Script will delete all files starting with `C-00000291*` located in the `C:\Windows\System32\drivers\CrowdStrike\folder`
+      2. The device will automatically reboot and load the operating system.
+5. To execute remediation steps manually 
+   1. Open Windows Explorer and navigate to `C:\Windows\System32\drivers\Crowdstrike`
+   2. Delete all files starting with `C-00000291*` located in the `C:\Windows\System32\drivers\CrowdStrike\folder`
+   3. Right-click on Command Prompt and select _Run as administrator_
+   4. Type the following command and press enter 
+      1. `bcdedit /deletevalue {default} safeboot`
+   5. Reboot the device and verify the operating system loads successfully.
+
 
 #### Recovering Windows Hosts using PXE
 
