@@ -149,6 +149,7 @@ Due to significant differences in network and software configurations with PXE b
 - Libvirt Input Driver (Red Hat/Fedora signed WHQL version)
 - HP Client Driver Pack
 - Dell WinPE Driver Pack
+- Microsoft Surface Drivers
 
 ### Installed WinPE Components
 
