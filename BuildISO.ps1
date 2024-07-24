@@ -1,5 +1,5 @@
 <# CrowdStrike Preinstallation Environment Recovery ISO Builder
-v1.1.0
+v1.2.0
 #>
 #Requires -RunAsAdministrator
 Param(
@@ -24,8 +24,57 @@ $MakeWinPEMediaPath = [System.Environment]::ExpandEnvironmentVariables("%Program
 $DriversDir = "$PSScriptRoot\Drivers"
 $ScriptsDir = "$PSScriptRoot\Scripts"
 
+Write-Host "[+] Checking if drivers directory exists..."
+if (Test-Path -Path "$DriversDir" -PathType Container) {
+    Write-Host "[+] Drivers directory exists"
+} else {
+    Write-Host "[-] ERROR: The drivers does not exist, please review the documentation and re-run this tool." -ForegroundColor Red
+    Exit
+}
+
+Write-Host "[+] Checking if scripts directory exists..."
+if (Test-Path -Path "$ScriptsDir" -PathType Container) {
+    Write-Host "[+] Scripts directory exists"
+} else {
+    Write-Host "[-] ERROR: The scripts does not exist, please review the documentation and re-run this tool." -ForegroundColor Red
+    Exit
+}
+
 $CSPERecoveryISO = "CSPERecovery_x64.iso"
 $CSSafeBootISO = "CSSafeBoot_x64.iso"
+function Get-CSVFile {
+    Param(
+        [Parameter(Mandatory = $true)]
+        $FilePath
+    )
+    if (-Not (Test-Path -Path "$FilePath")) {
+        Write-Host "[+] No BitLockerKeys.csv - skipping"
+        return $false
+    }
+
+    Write-Host "[+] Found a BitLocker key database CSV"
+    $KeyDatabase = Import-Csv -Path $FilePath
+    
+    foreach ($KeyEntry in $KeyDatabase) {
+        $IsRecoveryIDValid = ($KeyEntry.KeyID -match '^\w{8}-(\w{4}-){3}\w{12}$' -and $KeyEntry.KeyID.Length -eq 36)
+        if (-Not $IsRecoveryIDValid)
+        {
+            Write-Host "[-] Found invalid recovery ID $($KeyEntry.KeyID), aborting CSV import" -ForegroundColor Red
+            Write-Host "[-] ERROR: invalid format in BitLockerKeys.csv" -ForegroundColor Red
+            Exit
+        } 
+        $IsRecoveryKeyValid = ($KeyEntry.RecoveryKey -match '^(\d{6}-){7}\d{6}$' -and $KeyEntry.RecoveryKey.Length -eq 55)
+        if (-Not $IsRecoveryKeyValid)
+        {
+            Write-Host "[-] Found invalid recovery key $($KeyEntry.RecoveryKey), aborting CSV import" -ForegroundColor Red
+            Write-Host "[-] ERROR: invalid format in BitLockerKeys.csv" -ForegroundColor Red
+            Exit
+        } 
+    }
+
+    Write-Host "[+] Successfully validated BitLocker recovery keys and ID's"
+    return $true
+}
 
 function Install-ADK-MS {
     Write-Host "[+] Checking if ADK is installed..."
@@ -50,7 +99,7 @@ function Install-ADK-MS {
 
         # Download
         Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2271337" -OutFile $ADKInstaller -ErrorAction Stop
-        
+
         # Verify hash
         if ((Get-FileHash $ADKInstaller).Hash -ne "3DBB9BF40E9CF5FACD9D770BE8EBA8F9509E77FC20A6051C0D9BAA1173F98E4B")
         {
@@ -58,7 +107,7 @@ function Install-ADK-MS {
             Exit
         }
         Write-Host "[+] Please wait while the ADK is downloaded and installed. Please note that this may take a while." -ForegroundColor Blue
-        Start-Process -FilePath $ADKInstaller -ArgumentList "/features", "OptionId.DeploymentTools", "/q", "/ceip", "off", "/installpath", """$ADKInstallLocation""", "/norestart" -Wait
+        Start-Process -FilePath "$ADKInstaller" -ArgumentList "/features", "OptionId.DeploymentTools", "/q", "/ceip", "off", "/installpath", """$ADKInstallLocation""", "/norestart" -Wait
         Write-Host "[+] Successfully installed Windows ADK." -ForegroundColor Green
     }
 
@@ -66,7 +115,7 @@ function Install-ADK-MS {
     # Check if the ADK WinPE Addon is installed
     #
     Write-Host "[+] Checking if ADK WinPE addon is installed..."
-    $ADKWinPEInstalled = Test-Path -Path $ADKWinPELocation
+    $ADKWinPEInstalled = Test-Path -Path "$ADKWinPELocation"
     if ($ADKWinPEInstalled)
     {
         Write-Host "[+] An installation of Windows ADK WinPE add-on was found on this device. Skipping installation." -ForegroundColor Yellow
@@ -86,7 +135,7 @@ function Install-ADK-MS {
 
         # Download
         Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2271338" -OutFile $ADKWinPEAddOnInstaller -ErrorAction Stop
-        
+
         # Verify hash
         if ((Get-FileHash $ADKWinPEAddOnInstaller).Hash -ne "91AC010247B65244E5CD84C5F342D91B16501DBB08E422DE7DE06850CEF5680B")
         {
@@ -95,7 +144,7 @@ function Install-ADK-MS {
         }
 
         Write-Host "[+] Please wait while the Windows PE ADK addon is downloaded and installed. Please note that this may take a while." -ForegroundColor Blue
-        Start-Process -FilePath $ADKWinPEAddOnInstaller -ArgumentList "/features", "OptionId.WindowsPreinstallationEnvironment", "/q", "/ceip", "off", "/installpath", """$ADKInstallLocation""", "/norestart" -Wait
+        Start-Process -FilePath "$ADKWinPEAddOnInstaller" -ArgumentList "/features", "OptionId.WindowsPreinstallationEnvironment", "/q", "/ceip", "off", "/installpath", """$ADKInstallLocation""", "/norestart" -Wait
         Write-Host "[+] Successfully installed the Windows ADK WinPE add-on." -ForegroundColor Green
     }
 }
@@ -110,7 +159,7 @@ function Get-VMwareDrivers {
     $OutputPath = "$WorkDir\VMware-tools-windows-12.4.5-23787635.iso"
 
     $ProgressPreference = "SilentlyContinue"
-    Invoke-WebRequest -Uri $URL -OutFile $OutputPath -ErrorAction Stop
+    Invoke-WebRequest -Uri $URL -OutFile "$OutputPath" -ErrorAction Stop
     $ProgressPreference = "Continue"
 
     Write-Host "[+] Verifying the integrity of the VMware Tools package"
@@ -121,15 +170,15 @@ function Get-VMwareDrivers {
     }
 
     Write-Host "[+] Mounting VMware Tools ISO"
-    $mount = Mount-DiskImage -ImagePath $OutputPath -StorageType ISO
+    $mount = Mount-DiskImage -ImagePath "$OutputPath" -StorageType ISO
     $vol = Get-Volume | Where-Object {$_.FileSystemLabel -eq "VMware Tools"}
     $vol = $vol[0]
 
     Write-Host "[+] Copying the VMware PVSCSI driver into the working directory"
     $VMwareDriveLetter = $vol.DriveLetter
     $PVSCSIDir = "$WorkDir\Drivers\VMwarePVSCSI"
-    mkdir $PVSCSIDir
-    Copy-Item -Path "$VMwareDriveLetter`:\Program Files\VMware\VMware Tools\Drivers\pvscsi\Win10\amd64\*" -Destination $PVSCSIDir -Recurse
+    mkdir "$PVSCSIDir"
+    Copy-Item -Path "$VMwareDriveLetter`:\Program Files\VMware\VMware Tools\Drivers\pvscsi\Win10\amd64\*" -Destination "$PVSCSIDir" -Recurse
 
     Write-Host "[+] Unmounting VMware Tools ISO"
     Dismount-DiskImage -DevicePath $mount.DevicePath
@@ -147,18 +196,18 @@ function Get-HPClientDrivers {
     mkdir "$WorkDir\Drivers\HP"
 
     $ProgressPreference = "SilentlyContinue"
-    Invoke-WebRequest -Uri $URL -OutFile $OutputPath -ErrorAction Stop
+    Invoke-WebRequest -Uri $URL -OutFile "$OutputPath" -ErrorAction Stop
     $ProgressPreference = "Continue"
 
     Write-Host "[+] Verifying the integrity of the HP Client Driver Pack"
-    if ((Get-FileHash $OutputPath).Hash -ne "A1825CA0248B3121695D8EA78BFBF43046C4B842C4BF83D6AF6E3B6DFBDD89BE")
+    if ((Get-FileHash "$OutputPath").Hash -ne "A1825CA0248B3121695D8EA78BFBF43046C4B842C4BF83D6AF6E3B6DFBDD89BE")
     {
         Write-Host "[-] ERROR: Failed to verify HP Windows PE Client Driver Pack hash" -ForegroundColor Red
         Exit
     }
 
     Write-Host "[+] Executing the HP Driver Pack driver package to extract the Windows PE drivers..."
-    Start-Process $OutputPath -ArgumentList "/s", "/e", "/f", """$WorkDir\Drivers\HP""" -NoNewWindow -Wait
+    Start-Process "$OutputPath" -ArgumentList "/s", "/e", "/f", """$WorkDir\Drivers\HP""" -NoNewWindow -Wait
 
     Write-Host "[+] Curating HP drivers"
     Remove-Item -Path "$WorkDir\Drivers\HP\WinPE10_2.70\x64_winpe10\network" -Recurse -Confirm:$false
@@ -176,11 +225,11 @@ function Get-DellDrivers-WinPE10 {
     $OutputPath = "$WorkDir\WinPE10.0-Drivers-A33-CCKD7.cab"
 
     $ProgressPreference = "SilentlyContinue"
-    Invoke-WebRequest -Uri $URL -OutFile $OutputPath -ErrorAction Stop
+    Invoke-WebRequest -Uri $URL -OutFile "$OutputPath" -ErrorAction Stop
     $ProgressPreference = "Continue"
 
     Write-Host "[+] Verifying the integrity of the Dell Windows PE Driver Pack (Win10+)"
-    if ((Get-FileHash $OutputPath).Hash -ne "7D2A85674B0BBED95C2905A30F6C9B30E7F3723911E56351DAD33D82549F4EE3")
+    if ((Get-FileHash "$OutputPath").Hash -ne "7D2A85674B0BBED95C2905A30F6C9B30E7F3723911E56351DAD33D82549F4EE3")
     {
         Write-Host "[-] ERROR: Failed to verify Dell Windows PE Driver Pack (Win10+) hash" -ForegroundColor Red
         Exit
@@ -212,11 +261,11 @@ function Get-DellDrivers-WinPE11 {
     $OutputPath = "$WorkDir\WinPE11.0-Drivers-A03-V81GV.cab"
 
     $ProgressPreference = "SilentlyContinue"
-    Invoke-WebRequest -Uri $URL -OutFile $OutputPath -ErrorAction Stop
+    Invoke-WebRequest -Uri $URL -OutFile "$OutputPath" -ErrorAction Stop
     $ProgressPreference = "Continue"
 
     Write-Host "[+] Verifying the integrity of the Dell Windows PE Driver Pack (Win11+)"
-    if ((Get-FileHash $OutputPath).Hash -ne "23E3D5D921525246B6A0D55797392B7DFA08D293D4B16073B1E1B41F8FB4B3AF")
+    if ((Get-FileHash "$OutputPath").Hash -ne "23E3D5D921525246B6A0D55797392B7DFA08D293D4B16073B1E1B41F8FB4B3AF")
     {
         Write-Host "[-] ERROR: Failed to verify Dell Windows PE Driver Pack (Win11+) hash" -ForegroundColor Red
         Exit
@@ -242,7 +291,7 @@ function Get-Packaged-Drivers {
         $WorkDir
     )
     Write-Host "[+] Staging drivers packaged with this script"
-    Copy-Item -Recurse -Path $DriversDir -Destination "$WorkDir\Drivers"
+    Copy-Item -Recurse -Path "$DriversDir" -Destination "$WorkDir\Drivers"
 }
 
 function Get-SurfaceDrivers {
@@ -401,10 +450,10 @@ function Get-SurfaceDrivers {
     Foreach ($SurfacePackage in $SurfacePackages.values) {
         Write-Host "[+] Downloading driver package for $($SurfacePackage.Name)..."
         $DownloadPath = "$WorkDir\$($SurfacePackage.FileName)"
-        Invoke-WebRequest -Uri $SurfacePackage.URL -OutFile $DownloadPath
+        Invoke-WebRequest -Uri $SurfacePackage.URL -OutFile "$DownloadPath"
 
         Write-Host "[+] Verifying the driver package for $($SurfacePackage.Name)"
-        if ((Get-FileHash $DownloadPath).Hash -ne $SurfacePackage.DownloadHash) {
+        if ((Get-FileHash "$DownloadPath").Hash -ne $SurfacePackage.DownloadHash) {
             Write-Host "[-] ERROR: Failed to verify $($SurfacePackage.Name) driver package hash" -ForegroundColor Red
             Exit
         }
@@ -423,31 +472,40 @@ function Get-SurfaceDrivers {
         Write-Host "[+] Gathering necessary Surface drivers for Windows PE"
         Foreach ($SurfaceDriverType in $SurfaceDriverTypes) {
             $SourceDriverFolder = "$ThisDriverTempDir\SurfaceUpdate\$SurfaceDriverType"
-            if (Test-Path -Path $SourceDriverFolder) {
+            if (Test-Path -Path "$SourceDriverFolder") {
                 Write-Host "[+] Gathering $SurfaceDriverType driver for $($SurfacePackage.Name)"
-                Move-Item -Path $SourceDriverFolder -Destination $ThisDriverDir
+                Move-Item -Path "$SourceDriverFolder" -Destination "$ThisDriverDir"
             }
         }
 
         Write-Host "[+] Cleaning up $($SurfacePackage.Name) driver package"
-        Remove-Item -Path $ThisDriverTempDir -Recurse -Confirm:$false -Force
-        Remove-Item -Path $DownloadPath -Confirm:$false -Force
+        Remove-Item -Path "$ThisDriverTempDir" -Recurse -Confirm:$false -Force
+        Remove-Item -Path "$DownloadPath" -Confirm:$false -Force
     }
 
     Write-Host "[+] Surface drivers successfully staged" -ForegroundColor Green
     $ProgressPreference = "Continue"
 }
 
-function Make-WorkDir {
+function New-Directory {
     Param(
         [Parameter(Mandatory = $true)]
-        $WorkDir
+        $Dir
     )
-    mkdir $WorkDir
-    mkdir $WorkDir\Drivers
+
+    if (Test-Path -Path $Dir) {
+        if (Test-Path -Path "$Dir\Drivers") {
+            Remove-Item -Path "$Dir\Drivers" -Force
+        }
+        Remove-Item -Path "$Dir" -Force
+        Write-Host "[+] Cleaned up the old working directory $Dir"
+    }
+
+    mkdir "$Dir"
+    mkdir "$Dir\Drivers"
 }
 
-function Make-BootDisks {
+function New-BootDisks {
     Param(
         [Parameter(Mandatory = $true)]
         $WorkDir
@@ -465,7 +523,7 @@ function Make-BootDisks {
 
     Write-Host "[+] Creating a working copy of Windows PE"
     $WinPEPath = "$WorkDir\WinPE"
-    Start-Process -FilePath $CopyPEPath -ArgumentList "amd64", """$WinPEPath""" -NoNewWindow -Wait
+    Start-Process -FilePath "$CopyPEPath" -ArgumentList "amd64", """$WinPEPath""" -NoNewWindow -Wait
 
     Write-Host "[+] Adding libvirt licence"
     Copy-Item -Path "$DriversDir\libvirt\readme-license.rtf" -Destination "$WinPEPath\media\readme-license.rtf"
@@ -473,7 +531,7 @@ function Make-BootDisks {
     $WinPEMountLocation = "$WinPEPath\mount"
 
     Write-Host "[+] Mounting Windows PE Image"
-    Mount-WindowsImage -ImagePath "$WinPEPath\media\sources\boot.wim" -Path $WinPEMountLocation -Index 1
+    Mount-WindowsImage -ImagePath "$WinPEPath\media\sources\boot.wim" -Path "$WinPEMountLocation" -Index 1
 
     Write-Host "[+] Setting Locale to en-US"
     Start-Process dism -ArgumentList "/Set-AllIntl:en-US", "/Image:""$WinPEMountLocation""" -NoNewWindow -Wait
@@ -525,36 +583,51 @@ function Make-BootDisks {
     Write-Host "[+] Installing Drivers"
     Start-Process dism -ArgumentList "/Image:""$WinPEMountLocation""", "/Add-Driver", "/Recurse", "/Driver:""$WorkDir\Drivers""" -NoNewWindow -Wait
 
-    Write-Host "[+] Installing CrowdStrike Recovery Scripts"
+    Write-Host "[+] Installing CrowdStrike Recovery iso"
     Copy-Item -Force -Path "$ScriptsDir\CSPERecovery_startnet.cmd" -Destination "$WinPEMountLocation\Windows\System32\startnet.cmd"
     Copy-Item -Force -Path "$ScriptsDir\CSPERecovery.ps1" -Destination "$WinPEMountLocation\Windows\System32\CSPERecovery.ps1"
 
+    if ($BitlockerCSV) {
+        Write-Host "[+] Adding BitLockerKeys.csv to recovery iso"
+        Copy-Item -Force -Path "$PSScriptRoot\BitLockerKeys.csv" -Destination "$WinPEMountLocation\BitLockerKeys.csv"
+    }
+
     Write-Host "[+] Dismounting and committing Windows PE Image"
-    Dismount-WindowsImage -Path $WinPEMountLocation -Save
+    Dismount-WindowsImage -Path "$WinPEMountLocation" -Save
 
     Write-Host "[+] CS WinPE Recovery boot.wim built" -ForegroundColor Green
 
     Write-Host "[+] Creating CS WinPE Recovery bootable ISO"
-    Start-Process $MakeWinPEMediaPath -ArgumentList "/ISO", """$WinPEPath""", $CSPERecoveryISO -NoNewWindow -Wait
+
+    Push-Location $WorkDir
+    Start-Process $MakeWinPEMediaPath -ArgumentList "/ISO", "WinPE", "..\$CSPERecoveryISO" -NoNewWindow -Wait
+    Pop-Location
+
     Write-Host "[+] CS WinPE Recovery ISO build completed successfully" -ForegroundColor Green
 
     Write-Host "[+] Building Safe Mode Boot ISO"
     Write-Host "[+] Mounting Windows PE Image"
-    Mount-WindowsImage -ImagePath "$WinPEPath\media\sources\boot.wim" -Path $WinPEMountLocation -Index 1
+    Mount-WindowsImage -ImagePath "$WinPEPath\media\sources\boot.wim" -Path "$WinPEMountLocation" -Index 1
 
     Write-Host "[+] Installing Safe Mode Script"
     Remove-Item -Force -Path "$WinPEMountLocation\Windows\System32\CSPERecovery.ps1"
     Copy-Item -Force -Path "$ScriptsDir\SafeBoot_startnet.cmd" -Destination "$WinPEMountLocation\Windows\System32\startnet.cmd"
+    
+    if ($BitlockerCSV) {Remove-Item -Force -Path "$WinPEMountLocation\BitLockerKeys.csv"}
 
     Write-Host "[+] Installing Safe Boot recovery batch script"
     Copy-Item -Force -Path "$ScriptsDir\SafeBoot_CSRecovery.cmd" -Destination "$WinPEPath\media\CSRecovery.cmd"
 
     Write-Host "[+] Dismounting and committing Windows PE Image"
-    Dismount-WindowsImage -Path $WinPEMountLocation -Save
+    Dismount-WindowsImage -Path "$WinPEMountLocation" -Save
 
     Write-Host "[+] Windows PE Safe Boot boot.wim built" -ForegroundColor Green
     Write-Host "[+] Creating bootable ISO"
-    Start-Process $MakeWinPEMediaPath -ArgumentList "/ISO", """$WinPEPath""", $CSSafeBootISO -NoNewWindow -Wait
+
+    Push-Location $WorkDir
+    Start-Process $MakeWinPEMediaPath -ArgumentList "/ISO", "WinPE", "..\$CSSafeBootISO" -NoNewWindow -Wait
+    Pop-Location
+
     Write-Host "[+] Safe Boot ISO built" -ForegroundColor Green
 }
 
@@ -565,6 +638,9 @@ Write-Host "- Microsoft Assessment and Deployment Toolkit (ADK)"
 Write-Host "- Microsoft ADK Windows Preinstallation Environment Addon"
 Write-Host "- Any device drivers you include in the final bootable image"
 Write-Host "If you do not accept any of these terms, cancel execution of this script immediately. Execution will continue automatically in ten seconds." -ForegroundColor Yellow
+
+Write-Host "[+] Checking for BitLockerKeys.csv..."
+$BitlockerCSV = Get-CSVFile -FilePath "$PSScriptRoot\BitLockerKeys.csv"
 
 if ($true -eq $SkipThirdPartyDriverDownloads) {
     Write-Host "[+] NOTE: Skipping download of third party drivers from Dell, HP, and VMware" -ForegroundColor Yellow
@@ -613,14 +689,14 @@ Write-Host "[+] Downloading and Staging Drivers"
 # Setting up the work directory
 $LocalWorkDir = Get-Location
 $LocalWorkDir = "$LocalWorkDir\WorkDir"
-Make-WorkDir -WorkDir $LocalWorkDir
+New-Directory -Dir $LocalWorkDir
 
 # Install the Windows ADK
 Install-ADK-MS
 
 if ($true -eq $DriverPacks["Dell"].Enabled) {
     Get-DellDrivers-WinPE10 -WorkDir $LocalWorkDir
-    Get-DellDrivers-WinPE11 -WorkDir $LocalWorkDir 
+    Get-DellDrivers-WinPE11 -WorkDir $LocalWorkDir
 }
 
 if ($true -eq $DriverPacks["HP"].Enabled) {
@@ -638,17 +714,17 @@ if ($true -eq $DriverPacks["VMware"].Enabled) {
 Get-Packaged-Drivers -WorkDir $LocalWorkDir
 
 Write-Host "[+] Building Boot Disks"
-Make-BootDisks -WorkDir $LocalWorkDir
+New-BootDisks -WorkDir $LocalWorkDir
 
 Write-Host "[+] Complete!" -ForegroundColor Green
 Write-Host "CrowdStrike WinPE Recovery ISO: $CSPERecoveryISO"
 Write-Host "CrowdStrike Safe Boot ISO: $CSSafeBootISO"
 
 # SIG # Begin signature block
-# MIIpMgYJKoZIhvcNAQcCoIIpIzCCKR8CAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIpMQYJKoZIhvcNAQcCoIIpIjCCKR4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAcsUpsWNKvOphF
-# ihWJsadQZHW5uKLRJgAhpISv1Yc136CCDh4wggawMIIEmKADAgECAhAOTWf2QxbJ
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAtcSLDBKnVXx7v
+# n94uyTQBucJpNO9hM2xqB2NBni7G+KCCDh4wggawMIIEmKADAgECAhAOTWf2QxbJ
 # Kjt6F8xGl2qPMA0GCSqGSIb3DQEBCwUAMGIxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xITAfBgNV
 # BAMTGERpZ2lDZXJ0IFRydXN0ZWQgUm9vdCBHNDAeFw0yMTA3MjgwMDAwMDBaFw0z
@@ -723,146 +799,146 @@ Write-Host "CrowdStrike Safe Boot ISO: $CSSafeBootISO"
 # AzW28FUbqKnJnayD/3G+Ota4j6vATEXIzn1/RZH/1vhYW2B433uF4IxCu9x2VrIr
 # kb/j3wIKtk4rDUohQrCVaR6BlEWeiZoBh0W6d1hU8EQzMxjHaqowOXRzcrDh3w15
 # /amuIr0ivGmkhy4Nh0M3AZ1EzJNwBMVHsGhgpjJHF3HYoPHOmEIMFLY5/PdDXNQD
-# 0NUVSKl/LEcxK2bkhreQwCxXKaDLYxjnLaTcco3jYJER7yfpfPlPVjGCGmowghpm
+# 0NUVSKl/LEcxK2bkhreQwCxXKaDLYxjnLaTcco3jYJER7yfpfPlPVjGCGmkwghpl
 # AgEBMH0waTELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEw
 # PwYDVQQDEzhEaWdpQ2VydCBUcnVzdGVkIEc0IENvZGUgU2lnbmluZyBSU0E0MDk2
 # IFNIQTI1NiAyMDIxIENBMQIQDUj/2eJmrj5R3FwGE1OL8zANBglghkgBZQMEAgEF
 # AKB8MBAGCisGAQQBgjcCAQwxAjAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEE
-# MBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDs
-# J2iW9U78SeRp57yc9r8Eb1RVmPc/6FHgqaM5UBEGWzANBgkqhkiG9w0BAQEFAASC
-# AgCeKtzOL1MkNbrTh/9TOm9E59/U1VurM6Qmm4x0D4E6s7DPaaOutWFjhqxeh0tb
-# WznH6UGm2wp/K++Y44v7X33vHlusPh5BETDIJM6bfXgD8l2cfzMNfESyQYEPp05k
-# 2KKJuhJ7A22cYDb7FtapQcwKjg9wE6F4+xGZzT23E4eTMggR3ZKkez2XEl3xFdQp
-# KzxY/QCmEJwllJY4fALINCDULdZ7Un3nf9hPjhfGy//+W8dLS9m/ltjeIQZnca9x
-# j9zHRHknXlYlH/tcwtdbz5askt9A6TwGognnbeNYUGDM09t7NXeJx9U9SPM+rD7h
-# i26ZM0SHILG0ZTQa4ccz3h/EzCPsp9Jy8f6VARvdp9G5drYh4Ev0mQoMvHUnx1z2
-# rG6sI4r6M7z0JT7EoYnSdibeejzKbputq7ButXrT66NgFK8M5ACRKPmIKLAbmTIK
-# yG1GLJGg5yI0pyW7yJ0N8qRHD0ioKc+QbHME+yxUphleEqgOSer1mBExT3+Ydijq
-# OV5OSFrBiP3aZFghKMl8GJ0Y0yVMzu3OTQpRxFC1fLy0r10xWtOggDmNwLQFx2st
-# 5BiKEU+/CjsKWgvIBt5K3n6f67yM6Zq1KvON2m84V9/No3kUHruw4hDSGfnht6IM
-# HCYVZT+xOGxb0pEYyibtYAMOi2ciJxYVDZJC6vX/ut7yS6GCF0Awghc8BgorBgEE
-# AYI3AwMBMYIXLDCCFygGCSqGSIb3DQEHAqCCFxkwghcVAgEDMQ8wDQYJYIZIAWUD
-# BAIBBQAweAYLKoZIhvcNAQkQAQSgaQRnMGUCAQEGCWCGSAGG/WwHATAxMA0GCWCG
-# SAFlAwQCAQUABCDLf3Jeo056d87xPAIelxxcVRj3DIg0I4w7xFlIsOTXIAIRAKqk
-# xdSml+srwCmFKUrgXgQYDzIwMjQwNzIzMDQxMDQwWqCCEwkwggbCMIIEqqADAgEC
-# AhAFRK/zlJ0IOaa/2z9f5WEWMA0GCSqGSIb3DQEBCwUAMGMxCzAJBgNVBAYTAlVT
-# MRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5jLjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1
-# c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0EwHhcNMjMwNzE0
-# MDAwMDAwWhcNMzQxMDEzMjM1OTU5WjBIMQswCQYDVQQGEwJVUzEXMBUGA1UEChMO
-# RGlnaUNlcnQsIEluYy4xIDAeBgNVBAMTF0RpZ2lDZXJ0IFRpbWVzdGFtcCAyMDIz
-# MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAo1NFhx2DjlusPlSzI+DP
-# n9fl0uddoQ4J3C9Io5d6OyqcZ9xiFVjBqZMRp82qsmrdECmKHmJjadNYnDVxvzqX
-# 65RQjxwg6seaOy+WZuNp52n+W8PWKyAcwZeUtKVQgfLPywemMGjKg0La/H8JJJSk
-# ghraarrYO8pd3hkYhftF6g1hbJ3+cV7EBpo88MUueQ8bZlLjyNY+X9pD04T10Mf2
-# SC1eRXWWdf7dEKEbg8G45lKVtUfXeCk5a+B4WZfjRCtK1ZXO7wgX6oJkTf8j48qG
-# 7rSkIWRw69XloNpjsy7pBe6q9iT1HbybHLK3X9/w7nZ9MZllR1WdSiQvrCuXvp/k
-# /XtzPjLuUjT71Lvr1KAsNJvj3m5kGQc3AZEPHLVRzapMZoOIaGK7vEEbeBlt5NkP
-# 4FhB+9ixLOFRr7StFQYU6mIIE9NpHnxkTZ0P387RXoyqq1AVybPKvNfEO2hEo6U7
-# Qv1zfe7dCv95NBB+plwKWEwAPoVpdceDZNZ1zY8SdlalJPrXxGshuugfNJgvOupr
-# AbD3+yqG7HtSOKmYCaFxsmxxrz64b5bV4RAT/mFHCoz+8LbH1cfebCTwv0KCyqBx
-# PZySkwS0aXAnDU+3tTbRyV8IpHCj7ArxES5k4MsiK8rxKBMhSVF+BmbTO77665E4
-# 2FEHypS34lCh8zrTioPLQHsCAwEAAaOCAYswggGHMA4GA1UdDwEB/wQEAwIHgDAM
-# BgNVHRMBAf8EAjAAMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMIMCAGA1UdIAQZMBcw
-# CAYGZ4EMAQQCMAsGCWCGSAGG/WwHATAfBgNVHSMEGDAWgBS6FtltTYUvcyl2mi91
-# jGogj57IbzAdBgNVHQ4EFgQUpbbvE+fvzdBkodVWqWUxo97V40kwWgYDVR0fBFMw
-# UTBPoE2gS4ZJaHR0cDovL2NybDMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VHJ1c3Rl
-# ZEc0UlNBNDA5NlNIQTI1NlRpbWVTdGFtcGluZ0NBLmNybDCBkAYIKwYBBQUHAQEE
-# gYMwgYAwJAYIKwYBBQUHMAGGGGh0dHA6Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBYBggr
-# BgEFBQcwAoZMaHR0cDovL2NhY2VydHMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VHJ1
-# c3RlZEc0UlNBNDA5NlNIQTI1NlRpbWVTdGFtcGluZ0NBLmNydDANBgkqhkiG9w0B
-# AQsFAAOCAgEAgRrW3qCptZgXvHCNT4o8aJzYJf/LLOTN6l0ikuyMIgKpuM+AqNnn
-# 48XtJoKKcS8Y3U623mzX4WCcK+3tPUiOuGu6fF29wmE3aEl3o+uQqhLXJ4Xzjh6S
-# 2sJAOJ9dyKAuJXglnSoFeoQpmLZXeY/bJlYrsPOnvTcM2Jh2T1a5UsK2nTipgedt
-# QVyMadG5K8TGe8+c+njikxp2oml101DkRBK+IA2eqUTQ+OVJdwhaIcW0z5iVGlS6
-# ubzBaRm6zxbygzc0brBBJt3eWpdPM43UjXd9dUWhpVgmagNF3tlQtVCMr1a9TMXh
-# RsUo063nQwBw3syYnhmJA+rUkTfvTVLzyWAhxFZH7doRS4wyw4jmWOK22z75X7BC
-# 1o/jF5HRqsBV44a/rCcsQdCaM0qoNtS5cpZ+l3k4SF/Kwtw9Mt911jZnWon49qfH
-# 5U81PAC9vpwqbHkB3NpE5jreODsHXjlY9HxzMVWggBHLFAx+rrz+pOt5Zapo1iLK
-# O+uagjVXKBbLafIymrLS2Dq4sUaGa7oX/cR3bBVsrquvczroSUa31X/MtjjA2Owc
-# 9bahuEMs305MfR5ocMB3CtQC4Fxguyj/OOVSWtasFyIjTvTs0xf7UGv/B3cfcZdE
-# Qcm4RtNsMnxYL2dHZeUbc7aZ+WssBkbvQR7w8F/g29mtkIBEr4AQQYowggauMIIE
-# lqADAgECAhAHNje3JFR82Ees/ShmKl5bMA0GCSqGSIb3DQEBCwUAMGIxCzAJBgNV
-# BAYTAlVTMRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdp
-# Y2VydC5jb20xITAfBgNVBAMTGERpZ2lDZXJ0IFRydXN0ZWQgUm9vdCBHNDAeFw0y
-# MjAzMjMwMDAwMDBaFw0zNzAzMjIyMzU5NTlaMGMxCzAJBgNVBAYTAlVTMRcwFQYD
-# VQQKEw5EaWdpQ2VydCwgSW5jLjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBH
-# NCBSU0E0MDk2IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0EwggIiMA0GCSqGSIb3DQEB
-# AQUAA4ICDwAwggIKAoICAQDGhjUGSbPBPXJJUVXHJQPE8pE3qZdRodbSg9GeTKJt
-# oLDMg/la9hGhRBVCX6SI82j6ffOciQt/nR+eDzMfUBMLJnOWbfhXqAJ9/UO0hNoR
-# 8XOxs+4rgISKIhjf69o9xBd/qxkrPkLcZ47qUT3w1lbU5ygt69OxtXXnHwZljZQp
-# 09nsad/ZkIdGAHvbREGJ3HxqV3rwN3mfXazL6IRktFLydkf3YYMZ3V+0VAshaG43
-# IbtArF+y3kp9zvU5EmfvDqVjbOSmxR3NNg1c1eYbqMFkdECnwHLFuk4fsbVYTXn+
-# 149zk6wsOeKlSNbwsDETqVcplicu9Yemj052FVUmcJgmf6AaRyBD40NjgHt1bicl
-# kJg6OBGz9vae5jtb7IHeIhTZgirHkr+g3uM+onP65x9abJTyUpURK1h0QCirc0PO
-# 30qhHGs4xSnzyqqWc0Jon7ZGs506o9UD4L/wojzKQtwYSH8UNM/STKvvmz3+Drhk
-# Kvp1KCRB7UK/BZxmSVJQ9FHzNklNiyDSLFc1eSuo80VgvCONWPfcYd6T/jnA+bIw
-# pUzX6ZhKWD7TA4j+s4/TXkt2ElGTyYwMO1uKIqjBJgj5FBASA31fI7tk42PgpuE+
-# 9sJ0sj8eCXbsq11GdeJgo1gJASgADoRU7s7pXcheMBK9Rp6103a50g5rmQzSM7TN
-# sQIDAQABo4IBXTCCAVkwEgYDVR0TAQH/BAgwBgEB/wIBADAdBgNVHQ4EFgQUuhbZ
-# bU2FL3MpdpovdYxqII+eyG8wHwYDVR0jBBgwFoAU7NfjgtJxXWRM3y5nP+e6mK4c
-# D08wDgYDVR0PAQH/BAQDAgGGMBMGA1UdJQQMMAoGCCsGAQUFBwMIMHcGCCsGAQUF
-# BwEBBGswaTAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZGlnaWNlcnQuY29tMEEG
-# CCsGAQUFBzAChjVodHRwOi8vY2FjZXJ0cy5kaWdpY2VydC5jb20vRGlnaUNlcnRU
-# cnVzdGVkUm9vdEc0LmNydDBDBgNVHR8EPDA6MDigNqA0hjJodHRwOi8vY3JsMy5k
-# aWdpY2VydC5jb20vRGlnaUNlcnRUcnVzdGVkUm9vdEc0LmNybDAgBgNVHSAEGTAX
-# MAgGBmeBDAEEAjALBglghkgBhv1sBwEwDQYJKoZIhvcNAQELBQADggIBAH1ZjsCT
-# tm+YqUQiAX5m1tghQuGwGC4QTRPPMFPOvxj7x1Bd4ksp+3CKDaopafxpwc8dB+k+
-# YMjYC+VcW9dth/qEICU0MWfNthKWb8RQTGIdDAiCqBa9qVbPFXONASIlzpVpP0d3
-# +3J0FNf/q0+KLHqrhc1DX+1gtqpPkWaeLJ7giqzl/Yy8ZCaHbJK9nXzQcAp876i8
-# dU+6WvepELJd6f8oVInw1YpxdmXazPByoyP6wCeCRK6ZJxurJB4mwbfeKuv2nrF5
-# mYGjVoarCkXJ38SNoOeY+/umnXKvxMfBwWpx2cYTgAnEtp/Nh4cku0+jSbl3ZpHx
-# cpzpSwJSpzd+k1OsOx0ISQ+UzTl63f8lY5knLD0/a6fxZsNBzU+2QJshIUDQtxMk
-# zdwdeDrknq3lNHGS1yZr5Dhzq6YBT70/O3itTK37xJV77QpfMzmHQXh6OOmc4d0j
-# /R0o08f56PGYX/sr2H7yRp11LB4nLCbbbxV7HhmLNriT1ObyF5lZynDwN7+YAN8g
-# Fk8n+2BnFqFmut1VwDophrCYoCvtlUG3OtUVmDG0YgkPCr2B2RP+v6TR81fZvAT6
-# gt4y3wSJ8ADNXcL50CN/AAvkdgIm2fBldkKmKYcJRyvmfxqkhQ/8mJb2VVQrH4D6
-# wPIOK+XW+6kvRBVK5xMOHds3OBqhK/bt1nz8MIIFjTCCBHWgAwIBAgIQDpsYjvnQ
-# Lefv21DiCEAYWjANBgkqhkiG9w0BAQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UE
-# ChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYD
-# VQQDExtEaWdpQ2VydCBBc3N1cmVkIElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAw
-# WhcNMzExMTA5MjM1OTU5WjBiMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNl
-# cnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSEwHwYDVQQDExhEaWdp
-# Q2VydCBUcnVzdGVkIFJvb3QgRzQwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIK
-# AoICAQC/5pBzaN675F1KPDAiMGkz7MKnJS7JIT3yithZwuEppz1Yq3aaza57G4QN
-# xDAf8xukOBbrVsaXbR2rsnnyyhHS5F/WBTxSD1Ifxp4VpX6+n6lXFllVcq9ok3DC
-# srp1mWpzMpTREEQQLt+C8weE5nQ7bXHiLQwb7iDVySAdYyktzuxeTsiT+CFhmzTr
-# BcZe7FsavOvJz82sNEBfsXpm7nfISKhmV1efVFiODCu3T6cw2Vbuyntd463JT17l
-# Necxy9qTXtyOj4DatpGYQJB5w3jHtrHEtWoYOAMQjdjUN6QuBX2I9YI+EJFwq1WC
-# QTLX2wRzKm6RAXwhTNS8rhsDdV14Ztk6MUSaM0C/CNdaSaTC5qmgZ92kJ7yhTzm1
-# EVgX9yRcRo9k98FpiHaYdj1ZXUJ2h4mXaXpI8OCiEhtmmnTK3kse5w5jrubU75KS
-# Op493ADkRSWJtppEGSt+wJS00mFt6zPZxd9LBADMfRyVw4/3IbKyEbe7f/LVjHAs
-# QWCqsWMYRJUadmJ+9oCw++hkpjPRiQfhvbfmQ6QYuKZ3AeEPlAwhHbJUKSWJbOUO
-# UlFHdL4mrLZBdd56rF+NP8m800ERElvlEFDrMcXKchYiCd98THU/Y+whX8QgUWtv
-# sauGi0/C1kVfnSD8oR7FwI+isX4KJpn15GkvmB0t9dmpsh3lGwIDAQABo4IBOjCC
-# ATYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQU7NfjgtJxXWRM3y5nP+e6mK4c
-# D08wHwYDVR0jBBgwFoAUReuir/SSy4IxLVGLp6chnfNtyA8wDgYDVR0PAQH/BAQD
-# AgGGMHkGCCsGAQUFBwEBBG0wazAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZGln
-# aWNlcnQuY29tMEMGCCsGAQUFBzAChjdodHRwOi8vY2FjZXJ0cy5kaWdpY2VydC5j
-# b20vRGlnaUNlcnRBc3N1cmVkSURSb290Q0EuY3J0MEUGA1UdHwQ+MDwwOqA4oDaG
-# NGh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEFzc3VyZWRJRFJvb3RD
-# QS5jcmwwEQYDVR0gBAowCDAGBgRVHSAAMA0GCSqGSIb3DQEBDAUAA4IBAQBwoL9D
-# XFXnOF+go3QbPbYW1/e/Vwe9mqyhhyzshV6pGrsi+IcaaVQi7aSId229GhT0E0p6
-# Ly23OO/0/4C5+KH38nLeJLxSA8hO0Cre+i1Wz/n096wwepqLsl7Uz9FDRJtDIeuW
-# cqFItJnLnU+nBgMTdydE1Od/6Fmo8L8vC6bp8jQ87PcDx4eo0kxAGTVGamlUsLih
-# Vo7spNU96LHc/RzY9HdaXFSMb++hUD38dglohJ9vytsgjTVgHAIDyyCwrFigDkBj
-# xZgiwbJZ9VVrzyerbHbObyMt9H5xaiNrIv8SuFQtJ37YOtnwtoeW/VvRXKwYw02f
-# c7cBqZ9Xql4o4rmUMYIDdjCCA3ICAQEwdzBjMQswCQYDVQQGEwJVUzEXMBUGA1UE
-# ChMORGlnaUNlcnQsIEluYy4xOzA5BgNVBAMTMkRpZ2lDZXJ0IFRydXN0ZWQgRzQg
-# UlNBNDA5NiBTSEEyNTYgVGltZVN0YW1waW5nIENBAhAFRK/zlJ0IOaa/2z9f5WEW
-# MA0GCWCGSAFlAwQCAQUAoIHRMBoGCSqGSIb3DQEJAzENBgsqhkiG9w0BCRABBDAc
-# BgkqhkiG9w0BCQUxDxcNMjQwNzIzMDQxMDQwWjArBgsqhkiG9w0BCRACDDEcMBow
-# GDAWBBRm8CsywsLJD4JdzqqKycZPGZzPQDAvBgkqhkiG9w0BCQQxIgQgkIvDVhve
-# fLHmV6oLpu1uRn2Ja+QZcHyBxUc3Sc2Mx8wwNwYLKoZIhvcNAQkQAi8xKDAmMCQw
-# IgQg0vbkbe10IszR1EBXaEE2b4KK2lWarjMWr00amtQMeCgwDQYJKoZIhvcNAQEB
-# BQAEggIAP99djwp2XRi4GTfIEvbS7FBLGL3DgFkXpl/zLTy+7NyohRySMphtZoCo
-# bLJofB77X9mQVPN6jyYLgSh0gvpTWYQvZnRB2Qftqdo+QL5VwNsmXMm5tP54SP6E
-# Golup3kROzVHWG4EbS0xNqk+mxoEXTJDnH4XEni3/sLqE990uFmeoWtftusvJBcY
-# ODe2egN1TOU+1q8l6wfpmU3hzeJ1oqgyqvNCyDiF+JgnaCxIg0xffm8OhU33j3BN
-# ZJw/tX2hqKBFM5ygHswBqtvvxSzaAP9ayfyBgbqLjE00ZsUg3ODOnL3lFn50bgbw
-# aXZzkIxVWmKG/1yoi43asU7YGQMBed6YHyMHtxzYav+3uvTR52vqYzGA+E9XNWte
-# osnweERSkJW/Y8ExB3Ov1hsOmu8AlZ56vITgsO1vxCd2g8Rp9DsAyXWIm2E/wpM+
-# 7GlrE+au0oF2YtwGNdSxTxcSQmHbMj7IjSmx1pEZ3BDETaT+ViC+vtJn1rT7zO1B
-# YpDuXL9vV25EyO9kJ8Iev8TuC2u+e1nHF8jUBnkeYl/BGNXODClgj2RwpHLZhlm5
-# GqZqTmL83d7WbVP+54c7Y/shjKZ3MKq3a4TZa/7LoLRWnPLZQ3GCCfiDQbd6Ljz/
-# iD7fXhhJnZURMGWy/E45fBI5BC8xgevwKasy2ztr38p7ond2drc=
+# MBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDl
+# g9XNQ5baYM1kfjd5ArUCm1OShezOMDy+hdHfj5mTaDANBgkqhkiG9w0BAQEFAASC
+# AgAmvtlUz/tyaxsfEyFrib5bUI/yCoZscic/l+rc6lC0etKBlSghuvtNZQT8snT+
+# Q+BTXyUOo2Op7UhMhNsaojtYZ5IMMBEgiTCLOycmkDyL0cY/uWwRn4nuqwjABASK
+# rhewWakOkbRARhL0FjfVQVKor9ViQqYAGu09f1wUxMFw6zQb0/miVC4iOI1dNheS
+# X1llzQw1aET33SL3Zz5HuNnj17ToS6SSV58ade7OOiyO3h6U8KDJr5yovzNLWwZg
+# YfkuTEaoMPAZxe9IymGtUyvULicO0V/2QyTDNakcdrshGRv/TesylDaRFGeHVHv8
+# 8a4OUPtWeqOhq2KbV9NTrdv8awN/xma3hNDjCwzA4riLvGJf98zMFg9RY2l0oDqU
+# UL7gmM2XqmreLdK4Ed3lXzgFnb8yUFGaEFd2sgwXYnyZ8PTRgMkb4LAdngBiZRD3
+# tr/3Bxaxw4u0rPPqIMZUy7rFQKchhHwYfkXl5Ie6yAAU/UDPp9pxp0XdCsetWofF
+# qDZPDqj2PRK5ScXlbVoBaz5RsU18ebdADK6e4Zo9tzX2pswqQ+XNQDp6fISF4GqO
+# /P5EFru1aEJ+b83PR9aRYudn+vtAxfZvmEu6+vL7HceONAABq5OeAiJ9eKg+NAAZ
+# A4RH6uBVZfDms5WVBR0wYDpRcUYz4C6EaRudB8DqLBN6CaGCFz8wghc7BgorBgEE
+# AYI3AwMBMYIXKzCCFycGCSqGSIb3DQEHAqCCFxgwghcUAgEDMQ8wDQYJYIZIAWUD
+# BAIBBQAwdwYLKoZIhvcNAQkQAQSgaARmMGQCAQEGCWCGSAGG/WwHATAxMA0GCWCG
+# SAFlAwQCAQUABCCpNPljfvuQLASY8n1FLjwKFc0Ds+ACBk8yE/GJEf9QMQIQOh6f
+# eNXPgFQVtEbKXt/nXhgPMjAyNDA3MjQwMzE5NTJaoIITCTCCBsIwggSqoAMCAQIC
+# EAVEr/OUnQg5pr/bP1/lYRYwDQYJKoZIhvcNAQELBQAwYzELMAkGA1UEBhMCVVMx
+# FzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMTswOQYDVQQDEzJEaWdpQ2VydCBUcnVz
+# dGVkIEc0IFJTQTQwOTYgU0hBMjU2IFRpbWVTdGFtcGluZyBDQTAeFw0yMzA3MTQw
+# MDAwMDBaFw0zNDEwMTMyMzU5NTlaMEgxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5E
+# aWdpQ2VydCwgSW5jLjEgMB4GA1UEAxMXRGlnaUNlcnQgVGltZXN0YW1wIDIwMjMw
+# ggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCjU0WHHYOOW6w+VLMj4M+f
+# 1+XS512hDgncL0ijl3o7Kpxn3GIVWMGpkxGnzaqyat0QKYoeYmNp01icNXG/Opfr
+# lFCPHCDqx5o7L5Zm42nnaf5bw9YrIBzBl5S0pVCB8s/LB6YwaMqDQtr8fwkklKSC
+# Gtpqutg7yl3eGRiF+0XqDWFsnf5xXsQGmjzwxS55DxtmUuPI1j5f2kPThPXQx/ZI
+# LV5FdZZ1/t0QoRuDwbjmUpW1R9d4KTlr4HhZl+NEK0rVlc7vCBfqgmRN/yPjyobu
+# tKQhZHDr1eWg2mOzLukF7qr2JPUdvJscsrdf3/Dudn0xmWVHVZ1KJC+sK5e+n+T9
+# e3M+Mu5SNPvUu+vUoCw0m+PebmQZBzcBkQ8ctVHNqkxmg4hoYru8QRt4GW3k2Q/g
+# WEH72LEs4VGvtK0VBhTqYggT02kefGRNnQ/fztFejKqrUBXJs8q818Q7aESjpTtC
+# /XN97t0K/3k0EH6mXApYTAA+hWl1x4Nk1nXNjxJ2VqUk+tfEayG66B80mC866msB
+# sPf7Kobse1I4qZgJoXGybHGvPrhvltXhEBP+YUcKjP7wtsfVx95sJPC/QoLKoHE9
+# nJKTBLRpcCcNT7e1NtHJXwikcKPsCvERLmTgyyIryvEoEyFJUX4GZtM7vvrrkTjY
+# UQfKlLfiUKHzOtOKg8tAewIDAQABo4IBizCCAYcwDgYDVR0PAQH/BAQDAgeAMAwG
+# A1UdEwEB/wQCMAAwFgYDVR0lAQH/BAwwCgYIKwYBBQUHAwgwIAYDVR0gBBkwFzAI
+# BgZngQwBBAIwCwYJYIZIAYb9bAcBMB8GA1UdIwQYMBaAFLoW2W1NhS9zKXaaL3WM
+# aiCPnshvMB0GA1UdDgQWBBSltu8T5+/N0GSh1VapZTGj3tXjSTBaBgNVHR8EUzBR
+# ME+gTaBLhklodHRwOi8vY3JsMy5kaWdpY2VydC5jb20vRGlnaUNlcnRUcnVzdGVk
+# RzRSU0E0MDk2U0hBMjU2VGltZVN0YW1waW5nQ0EuY3JsMIGQBggrBgEFBQcBAQSB
+# gzCBgDAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZGlnaWNlcnQuY29tMFgGCCsG
+# AQUFBzAChkxodHRwOi8vY2FjZXJ0cy5kaWdpY2VydC5jb20vRGlnaUNlcnRUcnVz
+# dGVkRzRSU0E0MDk2U0hBMjU2VGltZVN0YW1waW5nQ0EuY3J0MA0GCSqGSIb3DQEB
+# CwUAA4ICAQCBGtbeoKm1mBe8cI1PijxonNgl/8ss5M3qXSKS7IwiAqm4z4Co2efj
+# xe0mgopxLxjdTrbebNfhYJwr7e09SI64a7p8Xb3CYTdoSXej65CqEtcnhfOOHpLa
+# wkA4n13IoC4leCWdKgV6hCmYtld5j9smViuw86e9NwzYmHZPVrlSwradOKmB521B
+# XIxp0bkrxMZ7z5z6eOKTGnaiaXXTUOREEr4gDZ6pRND45Ul3CFohxbTPmJUaVLq5
+# vMFpGbrPFvKDNzRusEEm3d5al08zjdSNd311RaGlWCZqA0Xe2VC1UIyvVr1MxeFG
+# xSjTredDAHDezJieGYkD6tSRN+9NUvPJYCHEVkft2hFLjDLDiOZY4rbbPvlfsELW
+# j+MXkdGqwFXjhr+sJyxB0JozSqg21Llyln6XeThIX8rC3D0y33XWNmdaifj2p8fl
+# TzU8AL2+nCpseQHc2kTmOt44OwdeOVj0fHMxVaCAEcsUDH6uvP6k63llqmjWIso7
+# 65qCNVcoFstp8jKastLYOrixRoZruhf9xHdsFWyuq69zOuhJRrfVf8y2OMDY7Bz1
+# tqG4QyzfTkx9HmhwwHcK1ALgXGC7KP845VJa1qwXIiNO9OzTF/tQa/8Hdx9xl0RB
+# ybhG02wyfFgvZ0dl5Rtztpn5aywGRu9BHvDwX+Db2a2QgESvgBBBijCCBq4wggSW
+# oAMCAQICEAc2N7ckVHzYR6z9KGYqXlswDQYJKoZIhvcNAQELBQAwYjELMAkGA1UE
+# BhMCVVMxFTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UECxMQd3d3LmRpZ2lj
+# ZXJ0LmNvbTEhMB8GA1UEAxMYRGlnaUNlcnQgVHJ1c3RlZCBSb290IEc0MB4XDTIy
+# MDMyMzAwMDAwMFoXDTM3MDMyMjIzNTk1OVowYzELMAkGA1UEBhMCVVMxFzAVBgNV
+# BAoTDkRpZ2lDZXJ0LCBJbmMuMTswOQYDVQQDEzJEaWdpQ2VydCBUcnVzdGVkIEc0
+# IFJTQTQwOTYgU0hBMjU2IFRpbWVTdGFtcGluZyBDQTCCAiIwDQYJKoZIhvcNAQEB
+# BQADggIPADCCAgoCggIBAMaGNQZJs8E9cklRVcclA8TykTepl1Gh1tKD0Z5Mom2g
+# sMyD+Vr2EaFEFUJfpIjzaPp985yJC3+dH54PMx9QEwsmc5Zt+FeoAn39Q7SE2hHx
+# c7Gz7iuAhIoiGN/r2j3EF3+rGSs+QtxnjupRPfDWVtTnKC3r07G1decfBmWNlCnT
+# 2exp39mQh0YAe9tEQYncfGpXevA3eZ9drMvohGS0UvJ2R/dhgxndX7RUCyFobjch
+# u0CsX7LeSn3O9TkSZ+8OpWNs5KbFHc02DVzV5huowWR0QKfAcsW6Th+xtVhNef7X
+# j3OTrCw54qVI1vCwMROpVymWJy71h6aPTnYVVSZwmCZ/oBpHIEPjQ2OAe3VuJyWQ
+# mDo4EbP29p7mO1vsgd4iFNmCKseSv6De4z6ic/rnH1pslPJSlRErWHRAKKtzQ87f
+# SqEcazjFKfPKqpZzQmiftkaznTqj1QPgv/CiPMpC3BhIfxQ0z9JMq++bPf4OuGQq
+# +nUoJEHtQr8FnGZJUlD0UfM2SU2LINIsVzV5K6jzRWC8I41Y99xh3pP+OcD5sjCl
+# TNfpmEpYPtMDiP6zj9NeS3YSUZPJjAw7W4oiqMEmCPkUEBIDfV8ju2TjY+Cm4T72
+# wnSyPx4JduyrXUZ14mCjWAkBKAAOhFTuzuldyF4wEr1GnrXTdrnSDmuZDNIztM2x
+# AgMBAAGjggFdMIIBWTASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBS6Ftlt
+# TYUvcyl2mi91jGogj57IbzAfBgNVHSMEGDAWgBTs1+OC0nFdZEzfLmc/57qYrhwP
+# TzAOBgNVHQ8BAf8EBAMCAYYwEwYDVR0lBAwwCgYIKwYBBQUHAwgwdwYIKwYBBQUH
+# AQEEazBpMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdpY2VydC5jb20wQQYI
+# KwYBBQUHMAKGNWh0dHA6Ly9jYWNlcnRzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFRy
+# dXN0ZWRSb290RzQuY3J0MEMGA1UdHwQ8MDowOKA2oDSGMmh0dHA6Ly9jcmwzLmRp
+# Z2ljZXJ0LmNvbS9EaWdpQ2VydFRydXN0ZWRSb290RzQuY3JsMCAGA1UdIAQZMBcw
+# CAYGZ4EMAQQCMAsGCWCGSAGG/WwHATANBgkqhkiG9w0BAQsFAAOCAgEAfVmOwJO2
+# b5ipRCIBfmbW2CFC4bAYLhBNE88wU86/GPvHUF3iSyn7cIoNqilp/GnBzx0H6T5g
+# yNgL5Vxb122H+oQgJTQxZ822EpZvxFBMYh0MCIKoFr2pVs8Vc40BIiXOlWk/R3f7
+# cnQU1/+rT4osequFzUNf7WC2qk+RZp4snuCKrOX9jLxkJodskr2dfNBwCnzvqLx1
+# T7pa96kQsl3p/yhUifDVinF2ZdrM8HKjI/rAJ4JErpknG6skHibBt94q6/aesXmZ
+# gaNWhqsKRcnfxI2g55j7+6adcq/Ex8HBanHZxhOACcS2n82HhyS7T6NJuXdmkfFy
+# nOlLAlKnN36TU6w7HQhJD5TNOXrd/yVjmScsPT9rp/Fmw0HNT7ZAmyEhQNC3EyTN
+# 3B14OuSereU0cZLXJmvkOHOrpgFPvT87eK1MrfvElXvtCl8zOYdBeHo46Zzh3SP9
+# HSjTx/no8Zhf+yvYfvJGnXUsHicsJttvFXseGYs2uJPU5vIXmVnKcPA3v5gA3yAW
+# Tyf7YGcWoWa63VXAOimGsJigK+2VQbc61RWYMbRiCQ8KvYHZE/6/pNHzV9m8BPqC
+# 3jLfBInwAM1dwvnQI38AC+R2AibZ8GV2QqYphwlHK+Z/GqSFD/yYlvZVVCsfgPrA
+# 8g4r5db7qS9EFUrnEw4d2zc4GqEr9u3WfPwwggWNMIIEdaADAgECAhAOmxiO+dAt
+# 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
+# EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
+# BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
+# Fw0zMTExMDkyMzU5NTlaMGIxCzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxEaWdpQ2Vy
+# dCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xITAfBgNVBAMTGERpZ2lD
+# ZXJ0IFRydXN0ZWQgUm9vdCBHNDCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoC
+# ggIBAL/mkHNo3rvkXUo8MCIwaTPswqclLskhPfKK2FnC4SmnPVirdprNrnsbhA3E
+# MB/zG6Q4FutWxpdtHauyefLKEdLkX9YFPFIPUh/GnhWlfr6fqVcWWVVyr2iTcMKy
+# unWZanMylNEQRBAu34LzB4TmdDttceItDBvuINXJIB1jKS3O7F5OyJP4IWGbNOsF
+# xl7sWxq868nPzaw0QF+xembud8hIqGZXV59UWI4MK7dPpzDZVu7Ke13jrclPXuU1
+# 5zHL2pNe3I6PgNq2kZhAkHnDeMe2scS1ahg4AxCN2NQ3pC4FfYj1gj4QkXCrVYJB
+# MtfbBHMqbpEBfCFM1LyuGwN1XXhm2ToxRJozQL8I11pJpMLmqaBn3aQnvKFPObUR
+# WBf3JFxGj2T3wWmIdph2PVldQnaHiZdpekjw4KISG2aadMreSx7nDmOu5tTvkpI6
+# nj3cAORFJYm2mkQZK37AlLTSYW3rM9nF30sEAMx9HJXDj/chsrIRt7t/8tWMcCxB
+# YKqxYxhElRp2Yn72gLD76GSmM9GJB+G9t+ZDpBi4pncB4Q+UDCEdslQpJYls5Q5S
+# UUd0viastkF13nqsX40/ybzTQRESW+UQUOsxxcpyFiIJ33xMdT9j7CFfxCBRa2+x
+# q4aLT8LWRV+dIPyhHsXAj6KxfgommfXkaS+YHS312amyHeUbAgMBAAGjggE6MIIB
+# NjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTs1+OC0nFdZEzfLmc/57qYrhwP
+# TzAfBgNVHSMEGDAWgBRF66Kv9JLLgjEtUYunpyGd823IDzAOBgNVHQ8BAf8EBAMC
+# AYYweQYIKwYBBQUHAQEEbTBrMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdp
+# Y2VydC5jb20wQwYIKwYBBQUHMAKGN2h0dHA6Ly9jYWNlcnRzLmRpZ2ljZXJ0LmNv
+# bS9EaWdpQ2VydEFzc3VyZWRJRFJvb3RDQS5jcnQwRQYDVR0fBD4wPDA6oDigNoY0
+# aHR0cDovL2NybDMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0QXNzdXJlZElEUm9vdENB
+# LmNybDARBgNVHSAECjAIMAYGBFUdIAAwDQYJKoZIhvcNAQEMBQADggEBAHCgv0Nc
+# Vec4X6CjdBs9thbX979XB72arKGHLOyFXqkauyL4hxppVCLtpIh3bb0aFPQTSnov
+# Lbc47/T/gLn4offyct4kvFIDyE7QKt76LVbP+fT3rDB6mouyXtTP0UNEm0Mh65Zy
+# oUi0mcudT6cGAxN3J0TU53/oWajwvy8LpunyNDzs9wPHh6jSTEAZNUZqaVSwuKFW
+# juyk1T3osdz9HNj0d1pcVIxv76FQPfx2CWiEn2/K2yCNNWAcAgPLILCsWKAOQGPF
+# mCLBsln1VWvPJ6tsds5vIy30fnFqI2si/xK4VC0nftg62fC2h5b9W9FcrBjDTZ9z
+# twGpn1eqXijiuZQxggN2MIIDcgIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQK
+# Ew5EaWdpQ2VydCwgSW5jLjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBS
+# U0E0MDk2IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYw
+# DQYJYIZIAWUDBAIBBQCggdEwGgYJKoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMBwG
+# CSqGSIb3DQEJBTEPFw0yNDA3MjQwMzE5NTJaMCsGCyqGSIb3DQEJEAIMMRwwGjAY
+# MBYEFGbwKzLCwskPgl3OqorJxk8ZnM9AMC8GCSqGSIb3DQEJBDEiBCA9Tps/ZYaW
+# c2WdN0vUEUHazgRQ1oRS3tBcFlYoGuTWZDA3BgsqhkiG9w0BCRACLzEoMCYwJDAi
+# BCDS9uRt7XQizNHUQFdoQTZvgoraVZquMxavTRqa1Ax4KDANBgkqhkiG9w0BAQEF
+# AASCAgCifGlqh9IIMJFnWd+r4W/QI8NOpqEP7IshXmrgnpLgdMUeLNUx02MC8Xkk
+# KQ58AtzVE/OJ1lIa0AI78aEDLiwsreu/kTvmbGygnfxU/lxDP9zL5h6TlG2CWgax
+# z88wM7lcgtUOGXQqqcoBXmR6fagVU3618uGvudTRguQv6SjZw2N2hKa2bFcljLtU
+# k/nL7lKan2E9fcwMW7Jhah2jRPcUMM5Ox8WX3PnMDL6TlkbgYbDDPCpy43wRmSAS
+# JXd4JKHSHm57F5uHJK8LKwEi6w/iElMPKX5KaMYPSwAOhugdPSAKVM4q0TeFT1m0
+# 8A5eOHvD5BQ/oQE3YY2jNI/mV2tGr0eAo8cRHV57/61VHO4aSXiL5gdS3CPsFNPf
+# ZgbqCmmq4xmKVUmXyXrmo+DXro6WIIL4itblz5Ncmut7mU37hnzw4k2TB8eVkb5T
+# DeXCgQwwm2+Bj0BGhZ565QcXt33sBGDf2d4XYpmjC4SHLkB8CQmuYXkL5AAg0KNp
+# 9sXMAIt6z3FPm7uBWbjhhnA6PPNYaXx0OhBynV0zzxp5l6Tx+xHhSSzbP47YlAGn
+# BcmKzXQMSIzsPghVserQvAhO0Yo72Bt2D7BsEyBwftUyiBhbGtbr/pxNkc4nc6f2
+# jKIGxYhGHEiCoqY5mXPMMPEUy9zCVzdv6x/Re7MOU0QCPYie1g==
 # SIG # End signature block
