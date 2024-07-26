@@ -5,10 +5,11 @@ Build bootable images to remediate Windows hosts impacted by the recent [Falcon 
 Watch the [CrowdStrike Host Remediation with Bootable USB Drive](https://www.youtube.com/watch?v=TZlUrXXVxc8) video for a demonstration.
 
 ### What's New
-**Release 1.3**
-- **OPTIONAL** - Automated BitLocker Recovery Key Collection 
-- Added most common CrowdStrike customer device drivers   
-- Added new parameter to skip "Press Any Key" prompt after rebooting
+
+#### Release 1.3.1
+
+- *CSPERecovery*: Removes prompt to accept CrowdStrike signing certificate during remediation
+- *CSPERecovery*: Disables `safeboot` after successful remediation, allowing Windows to boot normally
 
 ## Features
 
@@ -57,6 +58,7 @@ _**NOTE**: may take upwards of 30 minutes to build based on network and disk per
    3. `.\BuildISO.ps1` - downloads default set of device drivers and creates ISO images 
 2. Optional Command-line Arguments for `BuildISO.ps1` script
    1. `-SkipBootPrompt` - Disable the "press any key to boot from [media]" prompt when the system boots
+      1. This feature may not work on all systems
 3. Output: images 
    1. `C:\falcon-windows-host-recovery-main\CSPERecovery_x64.iso` 
    2. `C:\falcon-windows-host-recovery-main\CSSafeBoot_x64.iso`
