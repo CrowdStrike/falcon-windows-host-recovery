@@ -2,9 +2,9 @@
 .SYNOPSIS
     Remove potentially problematic CrowdStrike Falcon channel file via Windows PE
 .NOTES
-    Version:        v1.3.0
+    Version:        v1.3.1
     Author:         CrowdStrike, Inc.
-    Creation Date:  25 July 2024
+    Creation Date:  26 July 2024
 #>
 function Get-Drives {
     Write-Host "[+] Loading drives and checking encryption status."
@@ -213,7 +213,7 @@ function Repair-SingleDrive {
         [Parameter(Mandatory = $true)]
         $Drive
     )
-    Write-Host "[+] Attempting to remediate Falcon on drive $($Drive.DriverLetter):"
+    Write-Host "[+] Attempting to remediate Falcon on drive $($Drive.DriveLetter):"
 
     if (("True" -eq $Drive.Encrypted -or $true -eq $Drive.Encrypted) -and "On (Locked)" -eq $Drive.ProtectorStatus) {
         $unlocked = Unlock-DriveWithDatabase -Drive $Drive
@@ -302,6 +302,30 @@ function Repair-MultipleDrives {
     }
 }
 
+function Remove-SafeBoot {
+    Write-Host "[+] Ensuring system will not boot into Safe Mode"
+    # Capture all the output from the process upon execution
+    # Answer based on: https://stackoverflow.com/a/8762068
+    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+    $pinfo.FileName = "bcdedit.exe"
+    $pinfo.RedirectStandardError = $true
+    $pinfo.RedirectStandardOutput = $true
+    $pinfo.UseShellExecute = $false
+    $pinfo.Arguments = "/deletevalue", "{default}", "safeboot"
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $pinfo
+    $process.Start() | Out-Null
+    $process.WaitForExit()
+    $ExitCode = $process.ExitCode
+
+    if (0 -eq $ExitCode) {
+        Write-Host "[+] The system will now boot into Windows normally" -ForegroundColor Green
+    }
+    else {
+        Write-Host "[+] The system was not configured to boot into safe mode, so no changes were made."
+    }
+}
+
 function Repair-BootLoop {
     Write-Host "[+] Loading drive selection."
     $Drives = Get-Drives
@@ -319,6 +343,7 @@ function Repair-BootLoop {
     elseif ($DriveCount -eq 1) {
         $success = Repair-SingleDrive -Drive $Drives[0]
         if ($true -eq $success) {
+            Remove-SafeBoot
             Write-Host "[+] Success! Rebooting in five seconds..." -ForegroundColor Green
             Start-Sleep -Seconds 5
             wpeutil reboot
@@ -336,6 +361,7 @@ function Repair-BootLoop {
         $success = Repair-MultipleDrives -Drives $Drives
         # Handle this situation since multiple things could have gone wrong here
         if ($true -eq $success) {
+            Remove-SafeBoot
             Write-Host "[+] Success! Rebooting in five seconds..." -ForegroundColor Green
             Start-Sleep -Seconds 5
             wpeutil reboot
@@ -357,8 +383,8 @@ exit
 # SIG # Begin signature block
 # MIIuwgYJKoZIhvcNAQcCoIIuszCCLq8CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCMtaZ1Pb9bNmyx
-# JnLhpgfDxnxe3hrwUPZhRbjdvitxvaCCE68wggWNMIIEdaADAgECAhAOmxiO+dAt
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDWSnWJ3gnZC97p
+# RL2i1FowRQv6yD19D7bsLKSOjCZfnaCCE68wggWNMIIEdaADAgECAhAOmxiO+dAt
 # 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
 # BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
@@ -468,23 +494,23 @@ exit
 # dCBUcnVzdGVkIEc0IENvZGUgU2lnbmluZyBSU0E0MDk2IFNIQTI1NiAyMDIxIENB
 # MQIQDUj/2eJmrj5R3FwGE1OL8zANBglghkgBZQMEAgEFAKB8MBAGCisGAQQBgjcC
 # AQwxAjAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDpSxjKKa39wtonOEBCvW9H
-# 1eLQdMnVZ+lB/mrbzrfSUzANBgkqhkiG9w0BAQEFAASCAgBU4FE5aAfJjdngzuCZ
-# 0qMlA+Vz1Ox3fAiMjWOhSeeJkZw17wuawhBlvJIRPBV2xPjc5IRJj+kwjy1r0lzE
-# WgMSBvgOETnpLJEB7U1TNngb1BZPZKgOt9LVGQOXiVkmch4b22+WiQBLdRmPCaFl
-# H0xigfC/+1QyufbAwZnKfU00yL1URa8HQdx43W37v94YcLFIbAF3D5x+Y3OTHexr
-# iK2/pf752BNaTUwmz1XpZ00IZNLnLFtWtyOPK+wYJHejyQfMqrbN7YB8Oi7FTcnB
-# PAVX7vIcoHe0TApNd+BtuQGhTfK+FWlYsPvnGwlgk4iTm2Fc3Ucz0aSWdy6IQl46
-# 7OCY1KemmNHgiokW6jQYfpkJeI33EPaeOtn+wiu7peKT8K8Va/AwxC/sn3slOEXG
-# QMlmrOLSdIyOYEYq7EUItxPXKLvqshoGHFiGfZzQkD32nZ2q1WKD6dFw6bweBcbh
-# O1/q9qSDgbmHnGF252Wo2R+Ra8bxn+kOjKSGHCyvpFyRrp2p8BJ33V9q3sQCK4BI
-# fuhN8gyhmuc9LcdFHi+wkTSWwnbqU//C+zjk+q/3Lxh28sM9I28Bbk6hqtLdS9RX
-# 2upvbR5vWuT8YKxOoVy+u4Fvz4w3Ak+N3pGmzBqSmCxX1BAPA7BeCdqAmjh2vEzo
-# 6Qes9b1XTL1WN0G0rfES4YDna6GCFz8wghc7BgorBgEEAYI3AwMBMYIXKzCCFycG
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCC/H27rq51impjQFPdGC/J3
+# +0SeVOkpnlrq5iV0fmjbLDANBgkqhkiG9w0BAQEFAASCAgB8GmZ6zuE0ds/R6qxI
+# xO06NhnW4/vqjkTA6cnblmrdG5mNG0IxYmOkJHY90lXRZomeLOc1Cy9bIg6oCurh
+# LktpPzxCSOc2jK9jb7nHuXN0EkLZax+7fR0HFvQEz689RtcLA+qz71cH5DMiwkbn
+# TyGP9ryvk9btFqUXU5GUjVTh7YzxL1CtT98Hta9HRT5Xu6NShERIhMAm+9fpJd87
+# iEHNG8p7eE2DPpGT+Q5a6T7O3tgurOFe6/CFKuzd8NrRBv96CIMCArBnjzAeo2U2
+# Go6PnSxd2p5XTtmne08w0dhbKkTNX2jNdsEKFiDws2teAkdq9R5fu+NbKTf8Mzys
+# zhX+2vF9/BLmHd7I0mOrXHgNTnrNameOy0jQ4w2qfof/DNOKaie8pz2OOTGujFfw
+# iAd/ImNONGM7x8nsiyQBzLJSMRQIZFwsJ/S/BgwDzwknlgD3ZvsDqXfy4pePZ5CQ
+# IxuBxB4diX+/BSiQEDxEjtsF4KPwtLE9ihSJp8c5pHSb0S6wiOBhP9U3+fp2mUDX
+# y+wNlLbgG7LHV9MA5Yq0pjKS7TXyfSqGVeKPpsqFlajHMje39t7lLsM6GgXwsN8C
+# 0UaLzgnYaGbO0U+ha+nGGmQawITzfbcz537W4NrWVNfc/IyyKTpLTPS4spePGZJ/
+# sL8rWHWEnNjAe9sLPnb9Feh4R6GCFz8wghc7BgorBgEEAYI3AwMBMYIXKzCCFycG
 # CSqGSIb3DQEHAqCCFxgwghcUAgEDMQ8wDQYJYIZIAWUDBAIBBQAwdwYLKoZIhvcN
-# AQkQAQSgaARmMGQCAQEGCWCGSAGG/WwHATAxMA0GCWCGSAFlAwQCAQUABCC+JIhU
-# euxEQE/Jqc3XBp8odY2bq/bi44qf6CWh1xjK2wIQZRFqsUi95Mbu92E0OXDqPBgP
-# MjAyNDA3MjYwMDQ5MzFaoIITCTCCBsIwggSqoAMCAQICEAVEr/OUnQg5pr/bP1/l
+# AQkQAQSgaARmMGQCAQEGCWCGSAGG/WwHATAxMA0GCWCGSAFlAwQCAQUABCC2Iwsl
+# OOiDqw4vcGBDLSfdyFPqK/j6dw5xUfmskTXNKAIQMcrbO/x0Xe2SqQ0qNvo59hgP
+# MjAyNDA3MjYxOTUyNTBaoIITCTCCBsIwggSqoAMCAQICEAVEr/OUnQg5pr/bP1/l
 # YRYwDQYJKoZIhvcNAQELBQAwYzELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lD
 # ZXJ0LCBJbmMuMTswOQYDVQQDEzJEaWdpQ2VydCBUcnVzdGVkIEc0IFJTQTQwOTYg
 # U0hBMjU2IFRpbWVTdGFtcGluZyBDQTAeFw0yMzA3MTQwMDAwMDBaFw0zNDEwMTMy
@@ -590,19 +616,19 @@ exit
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # gdEwGgYJKoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0y
-# NDA3MjYwMDQ5MzFaMCsGCyqGSIb3DQEJEAIMMRwwGjAYMBYEFGbwKzLCwskPgl3O
-# qorJxk8ZnM9AMC8GCSqGSIb3DQEJBDEiBCCEGcT5Aj3uByLCTwRNmAPRwHti2ODb
-# l7vmfFJVx66O1zA3BgsqhkiG9w0BCRACLzEoMCYwJDAiBCDS9uRt7XQizNHUQFdo
-# QTZvgoraVZquMxavTRqa1Ax4KDANBgkqhkiG9w0BAQEFAASCAgAWcD7u1hh9UZH6
-# xdAvF7ZjNpcgviH1X7+mSYNzA6jXkhTzUJrDAu4H4l3OB86/PFfGzewefI2qkAXH
-# 0HsL0DapU1N/GhzlzEdZCeRNmjYB7V9lw1EIEKd+9vQetD6U5s1y+nwWtudW77pZ
-# 80G0aIrLkO+Z9WH/Dlt+kEOvVzqzJTeGLB1VgSUUqA538coy5evzWQKhPr020ord
-# FE3W+6A3WdXZItB3tbKkan8YMLOG80xXTUGqF5aG+k3CMKpj4NcndRssRxDUo2B6
-# zhZ7oVKWnumIMK/C1KeKTHZFMevAAKZdFUGuKYxgABk1hL10cfQJzbfXP9ew6nXV
-# uwYjLUbcGy1G2FAJ3t7rv3zJHlvCrdW2CeQG9yQhjD6iAPx8ZX5n3JwDFGjRBmc0
-# HUpXFK3hKI10XqHBigOQN9HrSbZqq9XEAr+fLwrbb7GjopdiPXXi9KPZJZj23X95
-# KhCjvKPkbMt0h0M1iqkSLbeYLPiH9Curq0wgjGfBx5rQlXIrsAcr4RU5kWfNUKcf
-# NkoxNHXgQ7nfbPZxOC3R8gYbqBbJ9KxDaXowbxDzs6qZNvgdV7n8BTEMZBoekAsm
-# FBRekZLAmo/ybSMOdO9p4nb9voERRsPq9bxl5AkokMWw4SSEG0LX57fRdaRBFndj
-# gSxRD9e7bZhEHB+Csd5d9+/NLmtLAA==
+# NDA3MjYxOTUyNTBaMCsGCyqGSIb3DQEJEAIMMRwwGjAYMBYEFGbwKzLCwskPgl3O
+# qorJxk8ZnM9AMC8GCSqGSIb3DQEJBDEiBCCtQ0afngTKlovXtW3wt0BkCllfnxSd
+# SW4mAPTy58+8oDA3BgsqhkiG9w0BCRACLzEoMCYwJDAiBCDS9uRt7XQizNHUQFdo
+# QTZvgoraVZquMxavTRqa1Ax4KDANBgkqhkiG9w0BAQEFAASCAgAcZJVxn5BN/SRw
+# f/JdmG9UsRihmXA/kCGRxUoscmXI9GLRWK6ABEOGF4bQ7/h2oqLw2LrxOXCdhssS
+# gQxhqVwMIMPLGQdOQ5j8sJiDWNkA5E6XplTM3HtRMoiE/rc1f4TNr/i5IlNM1Vsq
+# Rx/PFUHSq+hd6aZ20L8OBZbYZrCLQA/Wu6DxwN4fE3fzvdAWrIgm98O336xqHQKt
+# tAG1RG7L8twB+ML75klSEgX+rElUECQB1KfBqeYKwWQWeN+TqWM9FSLT3A97dv7f
+# /HhGtCwd4ybMY8abpB52VXSFac/q4SQHIWFlcjj4l6PKZpFz8gEY9f3tcom5+fe1
+# yb5C9GmA0/uyzJyFA/c9xQhlm/ZXxtRBBjKcxZyRA3MgVjfYEKD9eXUsF67c/d8S
+# fWna8flnEPwxqQxwcDFX0Gss8k92hIiicWb6BimIzGOFaAkhFIIs0aKPXQlCaBva
+# jamCfqXaFxxBtF85JJl5fzQgQ0e6hALtSg66bOSHbg1IIX6t3xx6NXQlKh35Y32y
+# 7dYztf2n0aAt902/17cd92LzTf2Q4IF9Sf3MqIkQ1jku1Wh5JnDO36vJ4KJ1MsBJ
+# Addlxxkw93wJCy2of9EhMi0XKR3E80XxDZaPg8Ic4+wsGEEhoU4cfWeikKBaH+fx
+# DGExi1Ntn1BxpmzJ1ZLcEXz7gvzukQ==
 # SIG # End signature block
