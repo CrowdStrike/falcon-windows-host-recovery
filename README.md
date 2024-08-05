@@ -6,10 +6,9 @@ Watch the [CrowdStrike Host Remediation with Bootable USB Drive](https://www.you
 
 ### What's New
 
-#### Release 1.3.1
+#### Release 1.3.2
 
-- *CSPERecovery*: Removes prompt to accept CrowdStrike signing certificate during remediation
-- *CSPERecovery*: Disables `safeboot` after successful remediation, allowing Windows to boot normally
+- *BuildISO.ps1*: Updated the Surface Laptop 4 for Intel Processor Driver Package
 
 ## Features
 
