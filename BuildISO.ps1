@@ -112,9 +112,9 @@ $PackageRepository = [ordered]@{
     }
     SurfacePro8 = @{
         Name = "Surface Pro 8";
-        URL = "https://download.microsoft.com/download/9/1/3/9133dbd3-799a-4766-bb9e-f67697159c02/SurfacePro8_Win11_22621_24.063.29016.0.msi";
-        DownloadHash = "88B52CC8853F320AB2F8874B97E578D4E48C354EF6F71A48DAB61995DB4F9601";
-        FileName = "SurfacePro8_Win11_22621_24.063.29016.0.msi";
+        URL = "https://download.microsoft.com/download/9/1/3/9133dbd3-799a-4766-bb9e-f67697159c02/SurfacePro8_Win11_22621_24.091.7017.0.msi";
+        DownloadHash = "B4B616EAFBDA4150F3F36FE30C59CEC7ADC8A4D751A3F9208806FB50D22ACAEC";
+        FileName = "SurfacePro8_Win11_22621_24.091.7017.0.msi";
         FolderName = "SurfacePro8";
     };
     SurfacePro9Intel = @{
@@ -126,16 +126,16 @@ $PackageRepository = [ordered]@{
     };
     SurfacePro10 = @{
         Name = "Surface Pro 10";
-        URL = "https://download.microsoft.com/download/d/c/c/dcc1042a-1a67-4b20-b0cd-5322f1604154/SurfacePro10forBusiness_Win11_22631_24.062.18480.0.msi";
-        DownloadHash = "7021A0BCDFF69F17931652E2CAD33A6DAC962B211E328DE66CE74663380708F4";
-        FileName = "SurfacePro10forBusiness_Win11_22631_24.062.18480.0.msi";
+        URL = "https://download.microsoft.com/download/d/c/c/dcc1042a-1a67-4b20-b0cd-5322f1604154/SurfacePro10forBusiness_Win11_22631_24.083.33201.0.msi";
+        DownloadHash = "25C45EAF1783FD25B04D540907A2372518A6AF146A83329F0E9298C672BA32FA";
+        FileName = "SurfacePro10forBusiness_Win11_22631_24.083.33201.0.msi";
         FolderName = "SurfacePro10";
     };
     SurfaceLaptop4AMD = @{
         Name = "Surface Laptop 4 with AMD Processor";
-        URL = "https://download.microsoft.com/download/c/2/8/c2840704-6c0e-4457-82ca-68502b1803b5/SurfaceLaptop4_AMD_Win11_22621_24.064.39167.0.msi";
-        DownloadHash = "5D400B10DEA79FC06FC62CA0A3B569F66AD7B55D28E537F16F73984500802CE2";
-        FileName = "SurfaceLaptop4_AMD_Win11_22621_24.064.39167.0.msi";
+        URL = "https://download.microsoft.com/download/c/2/8/c2840704-6c0e-4457-82ca-68502b1803b5/SurfaceLaptop4_AMD_Win11_22621_24.083.31322.0.msi";
+        DownloadHash = "5ABDC37333C2738EB857A1B2B2E615048413B23DC978F8D8AA2CCB49BE96113D";
+        FileName = "SurfaceLaptop4_AMD_Win11_22621_24.083.31322.0.msi";
         FolderName = "SurfaceLaptop4AMD";
     };
     SurfaceLaptop4Intel = @{
